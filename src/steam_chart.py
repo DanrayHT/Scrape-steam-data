@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from download_user_data import DATA_DIR, USER_PARTS, download_user_files
 
 def get_last_30d_avg(game_id: int) -> float:
     url = f"https://steamcharts.com/app/{game_id}"
@@ -24,7 +25,6 @@ def get_last_30d_avg(game_id: int) -> float:
 
 
 def add_30d_avg(df, max_workers=6):
-    """Add a 'last_30d_avg' column to df (must have an 'game_id' column)."""
     if "game_id" not in df.columns:
         raise ValueError("df must contain an 'game_id' column")
 
@@ -51,24 +51,28 @@ def add_30d_avg(df, max_workers=6):
     return df
 
 def create_df(max_workers):
-    df_user = pd.concat(
-        [pd.read_csv(f"data/steamgamerecommender/users_games{i}.csv") for i in range(1, 5)],
-        ignore_index=True,
+    download_user_files()
+
+    # Load 4 user files
+    df_user = pd.concat([pd.read_csv(DATA_DIR / part / "users_games.csv")for part in USER_PARTS],
+                        ignore_index=True,
     )
 
     df_game = df_user[["game_id"]].drop_duplicates().reset_index(drop=True)
     
-    df_game = add_30d_avg(df_game, max_workers=max_workers)
+    # df_game = add_30d_avg(df_game, max_workers=max_workers)
     original_game_count = len(df_game)
     print(f"Unique games: {original_game_count}")
 
-    df_game = df_game.dropna(subset=["last_30d_avg"]).reset_index(drop=True)
-    valid_game_ids = set(df_game["game_id"])
-    df_user = df_user[df_user["game_id"].isin(valid_game_ids)].reset_index(drop=True)
+    # df_game = df_game.dropna(subset=["last_30d_avg"]).reset_index(drop=True)
+    # valid_game_ids = set(df_game["game_id"])
+    # df_user = df_user[df_user["game_id"].isin(valid_game_ids)].reset_index(drop=True)
 
-    print(f"Tracked games: {len(df_game)}")
-    print(f"Removed games: {original_game_count - len(valid_game_ids)}")
-    print(f"User-game records remaining: {len(df_user)}")
+    # print(f"Tracked games: {len(df_game)}")
+    # print(f"Removed games: {original_game_count - len(valid_game_ids)}")
+    # print(f"User-game records remaining: {len(df_user)}")
 
-    df_game.to_csv("data/game.csv", index=False)
-    df_user.to_csv("data/user.csv", index=False)
+    # df_game.to_csv("data/game_chart.csv", index=False)
+    # df_user.to_csv("data/user.csv", index=False)
+
+create_df(1)
