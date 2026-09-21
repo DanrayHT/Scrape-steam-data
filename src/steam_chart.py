@@ -2,9 +2,9 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from download_user_data import DATA_DIR, USER_PARTS, download_user_files
+from src.download_user_data import DATA_DIR, USER_PARTS, download_user_files
 
-def get_last_30d_avg(game_id: int) -> float:
+def get_last_30d_avg(game_id: int) -> float | None:
     url = f"https://steamcharts.com/app/{game_id}"
     headers = {
             "User-Agent": (

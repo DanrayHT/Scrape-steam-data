@@ -1,39 +1,83 @@
+import time
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from steam_chart import create_df
+from src.steam_chart import create_df
 
-def get_steam_info(game_id: int) -> dict:
+
+def is_blocked(resp: requests.Response) -> bool:
+    if resp.status_code in (429, 403, 503):
+        return True
+
+    return False
+
+
+def fetch_with_backoff(url, headers, cookies=None, max_retries=5, base_delay=30):
+    for attempt in range(1, max_retries + 1):
+        resp = requests.get(url, headers=headers, cookies=cookies, timeout=10)
+
+        if not is_blocked(resp):
+            return resp
+
+        delay = base_delay * (2 ** (attempt - 1))  # 30s, 60s, 120s, 240s...
+        print(f"Get block (attempt {attempt}/{max_retries}), wait {delay}s to retry")
+        time.sleep(delay)
+
+    print("Too much retry attemp -> skip")
+    return None
+
+def get_steam_info(game_id: int) -> dict | None:
     url = f"https://store.steampowered.com/app/{game_id}"
     headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/125.0.0.0 Safari/537.36"
-            )
-        }
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/125.0.0.0 Safari/537.36"
+        )
+    }
+    cookies = {
+        "birthtime": "568022401",
+        "mature_content": "1",
+        "wants_mature_content": "1",
+        "lastagecheckage": "1-0-1990"
+    }
 
-    resp = requests.get(url, headers=headers, cookies={"birthtime": "568022401", "mature_content": "1"})
-    soup = BeautifulSoup(resp.text, "html.parser")
+    api_url = f"https://store.steampowered.com/api/appdetails?appids={game_id}"
+    api_resp = fetch_with_backoff(api_url, headers)
+    api_data = api_resp.json()
 
-    name_tag = soup.find("div", id="appHubAppName")
-    review_tag = soup.select_one("#userReviews span.game_review_summary")
-
-    if name_tag is None or review_tag is None:
+    if api_resp is None:
+        return None
+    
+    try:
+        api_data = api_resp.json()
+    except ValueError:
         return None
 
-    name = soup.find("div", id="appHubAppName").get_text(strip=True) 
-    review = soup.select_one("#userReviews span.game_review_summary").get_text(strip=True)
+    app_data = api_data.get(str(game_id))
+
+    if not app_data or not app_data.get("success"):
+        return None
+    
+    name = app_data["data"]["name"]
+
+    resp = fetch_with_backoff(url, headers, cookies)
+    if resp is None:
+        return None
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    review_tag = soup.select_one("#userReviews span.game_review_summary")
+
+    if review_tag is None:
+        return None
+
+    review = review_tag.get_text(strip=True)
     tags = [
         a.get_text(strip=True)
         for a in soup.select("div.glance_tags.popular_tags a.app_tag")
     ]
-    return {
-        "name": name,
-        "review": review,
-        "tags": "|".join(tags[:5])
-    }
+    return {"name": name, "review": review, "tags": "|".join(tags[:5])}
 
 def add_steam_info(df, max_workers=6):
     if "game_id" not in df.columns:
