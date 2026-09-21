@@ -53,26 +53,22 @@ def add_30d_avg(df, max_workers=6):
 def create_df(max_workers):
     download_user_files()
 
-    # Load 4 user files
     df_user = pd.concat([pd.read_csv(DATA_DIR / part / "users_games.csv")for part in USER_PARTS],
                         ignore_index=True,
     )
 
     df_game = df_user[["game_id"]].drop_duplicates().reset_index(drop=True)
     
-    # df_game = add_30d_avg(df_game, max_workers=max_workers)
+    df_game = add_30d_avg(df_game, max_workers=max_workers)
     original_game_count = len(df_game)
     print(f"Unique games: {original_game_count}")
 
-    # df_game = df_game.dropna(subset=["last_30d_avg"]).reset_index(drop=True)
-    # valid_game_ids = set(df_game["game_id"])
-    # df_user = df_user[df_user["game_id"].isin(valid_game_ids)].reset_index(drop=True)
+    df_game = df_game.dropna(subset=["last_30d_avg"]).reset_index(drop=True)
+    valid_game_ids = set(df_game["game_id"])
+    df_user = df_user[df_user["game_id"].isin(valid_game_ids)].reset_index(drop=True)
 
-    # print(f"Tracked games: {len(df_game)}")
-    # print(f"Removed games: {original_game_count - len(valid_game_ids)}")
-    # print(f"User-game records remaining: {len(df_user)}")
+    print(f"Tracked games: {len(df_game)}")
+    print(f"Removed games: {original_game_count - len(valid_game_ids)}")
+    print(f"User-game records remaining: {len(df_user)}")
 
-    # df_game.to_csv("data/game_chart.csv", index=False)
-    # df_user.to_csv("data/user.csv", index=False)
-
-create_df(1)
+    return df_user, df_game
