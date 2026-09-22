@@ -77,3 +77,6 @@ The final scraped dataset is available on Hugging Face:
     ├── game_info.csv          # Final game metadata
     └── user_final.csv         # Final user–game records
 ```
+
+## Proof of concept
+You can try to get user data without outside dataset. It will required Steam web API key and a list of steamid.
