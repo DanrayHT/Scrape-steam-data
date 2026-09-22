@@ -8,6 +8,7 @@ from src.steam_chart import create_df
 
 def is_blocked(resp: requests.Response) -> bool:
     if resp.status_code in (429, 403, 503):
+        print(resp.status_code)
         return True
 
     return False
@@ -15,12 +16,17 @@ def is_blocked(resp: requests.Response) -> bool:
 
 def fetch_with_backoff(url, headers, cookies=None, max_retries=5, base_delay=30):
     for attempt in range(1, max_retries + 1):
-        resp = requests.get(url, headers=headers, cookies=cookies, timeout=10)
+        try:
+            resp = requests.get(url, headers=headers, cookies=cookies, timeout=15)
+        except requests.exceptions.RequestException as e:
+            print(f"Request error: {e}, retry...")
+            time.sleep(base_delay * (2 ** (attempt - 1)))
+            continue
 
         if not is_blocked(resp):
             return resp
 
-        delay = base_delay * (2 ** (attempt - 1))  # 30s, 60s, 120s, 240s...
+        delay = base_delay * (2 ** (attempt - 1))
         print(f"Get block (attempt {attempt}/{max_retries}), wait {delay}s to retry")
         time.sleep(delay)
 
@@ -44,25 +50,25 @@ def get_steam_info(game_id: int) -> dict | None:
     }
 
     api_url = f"https://store.steampowered.com/api/appdetails?appids={game_id}"
+    print(f"[{game_id}] API start", flush=True)
     api_resp = fetch_with_backoff(api_url, headers)
-    api_data = api_resp.json()
 
     if api_resp is None:
         return None
-    
+
     try:
         api_data = api_resp.json()
     except ValueError:
         return None
 
     app_data = api_data.get(str(game_id))
-
     if not app_data or not app_data.get("success"):
         return None
-    
+
     name = app_data["data"]["name"]
 
     resp = fetch_with_backoff(url, headers, cookies)
+    print(f"[{game_id}] STORE done", flush=True)
     if resp is None:
         return None
 
@@ -92,19 +98,20 @@ def add_steam_info(df, max_workers=6):
             executor.submit(get_steam_info, game_id): game_id
             for game_id in game_ids
         }
-
         for i, future in enumerate(as_completed(futures), 1):
             game_id = futures[future]
-            result = future.result()
+            try:
+                result = future.result()
+            except Exception as e:
+                print(f"[{game_id}] Error: {e}")
+                continue
 
             if result is None:
                 print(f"Skip game: {game_id}")
                 continue
 
             results[game_id] = result
-
-            if i % 50 == 0 or i == len(game_ids):
-                print(f"Progress: {i}/{len(game_ids)}")
+            print(f"Progress: {i}/{len(game_ids)}")              
 
     df = df[df["game_id"].astype(int).isin(results)].copy()
     df["name"] = df["game_id"].astype(int).map(lambda x: results[x]["name"])
@@ -113,9 +120,14 @@ def add_steam_info(df, max_workers=6):
 
     return df
 
-def create_steam_info(max_workers=6):
-    df_user, df_game = create_df(max_workers)
+def create_steam_info(max_workers=1):
+    # create_df(max_workers) # Data get from 22/9/2026, only track 4963 games because steam chart have limit data
+    df_game = pd.read_csv("data/game_chart.csv")
+    print("read df_game")
+    df_user = pd.read_csv("data/user.csv")
+    print("read df_user")
     original_game_count = len(df_game)
+    print("start scraping data")
     df_game = add_steam_info(df_game, max_workers=max_workers)
 
     valid_game_ids = set(df_game["game_id"].astype(int))
@@ -127,4 +139,4 @@ def create_steam_info(max_workers=6):
     print(f"User-game records remaining: {len(df_user)}")
 
     df_game.to_csv("data/game_info.csv", index=False)
-    df_user.to_csv("data/user.csv", index=False)
+    df_user.to_csv("data/user_final.csv", index=False)

@@ -71,4 +71,5 @@ def create_df(max_workers):
     print(f"Removed games: {original_game_count - len(valid_game_ids)}")
     print(f"User-game records remaining: {len(df_user)}")
 
-    return df_user, df_game
+    df_game.to_csv("data/game_chart.csv", index=False)
+    df_user.to_csv("data/user.csv", index=False)
