@@ -53,7 +53,7 @@ User–game playtime records (kept only for games that survived both scraping st
 ### `data/game_info.csv`
 One row per game with:
 - `game_id` - Steam App ID
-- `last_30d_avg` - average concurrent players over the last 30 days (from Steam Charts)
+- `last_30d_avg` - average concurrent players over the last 30 days (from Steam Charts, Data get from 22/9/2026)
 - `name` - game name
 - `review` - review summary (e.g., "Overwhelmingly Positive")
 - `tags` - top 5 popular tags, pipe-separated (e.g., `Action|Adventure|Open World`)
